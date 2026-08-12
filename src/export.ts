@@ -101,13 +101,23 @@ export class IBookExport implements IExport {
 		try {
 			const filePath = normalizePath(path.join(this.plugin.settings.output, `${fileName}.md`));
 			const isExist = await this.plugin.app.vault.adapter.exists(filePath);
-			if (this.plugin.settings.backupWhenExist && isExist) {
-				// backup file if file already exists
-				// issue: #44
-				const backupPath = normalizePath(path.join(this.plugin.settings.output, `${fileName}-bk-${Date.now()}.md`));
-				this.plugin.app.vault.adapter.rename(filePath, backupPath);
+			if (isExist) {
+				// skip if content is identical, avoid redundant backups (issue: #44, #69)
+				const oldContent = await this.plugin.app.vault.adapter.read(filePath);
+				if (oldContent === content) {
+					return;
+				}
+				if (this.plugin.settings.backupWhenExist) {
+					// backup file if file already exists
+					// issue: #44
+					const backupPath = normalizePath(path.join(this.plugin.settings.output, `${fileName}-bk-${Date.now()}.md`));
+					await this.plugin.app.vault.adapter.rename(filePath, backupPath);
+				} else {
+					// remove old file so create() below can overwrite it
+					await this.plugin.app.vault.adapter.remove(filePath);
+				}
 			}
-			this.plugin.app.vault.create(
+			await this.plugin.app.vault.create(
 				path.join(this.plugin.settings.output, `${fileName}.md`),
 				content
 			);
